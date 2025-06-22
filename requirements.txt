@@ -1,4 +1,5 @@
 python-dotenv
+torch
 streamlit
 transformers
 google-generativeai
