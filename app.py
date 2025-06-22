@@ -9,15 +9,14 @@ from mood_logic.graph import build_graph, get_strategies_from_graph
 from mood_logic.forecast import forecast_mood
 from llm.gemini import configure_gemini, get_llm_suggestions
 
+# Initial setup
 create_tables()
 configure_gemini()
 graph = build_graph()
 emotion_pipe, tox_pipe = get_pipes()
 
-if "user_id" not in st.session_state:
-    st.session_state["user_id"] = None
-
-if st.session_state["user_id"] is None:
+# Safe session handling
+if st.session_state.get("user_id") is None:
     st.title("🔐 Login or Register")
     tab1, tab2 = st.tabs(["Login", "Register"])
 
@@ -42,6 +41,7 @@ if st.session_state["user_id"] is None:
                 st.error("Email already registered.")
     st.stop()
 
+# Main app
 st.set_page_config(page_title="🌱 Mood & Emotion Journal", layout="centered")
 st.title("🌱 Mood & Emotion Journal")
 
@@ -49,22 +49,31 @@ with st.form(key="journal_form"):
     user_text = st.text_area("How are you feeling today?", height=100)
     submitted = st.form_submit_button(label="Analyze & Log")
     if submitted and user_text.strip():
-        result = process_text(user_text, emotion_pipe, tox_pipe)
-        strategies = get_strategies_from_graph(result["emotion"])
-        suggestion = get_llm_suggestions(result["emotion"], strategies, user_text)
+        result = process_text(emotion_pipe, tox_pipe, user_text)
+        emotion = result["emotion_label"]
+        toxicity_score = result["toxicity_score"]
+        timestamp = datetime.now().isoformat()
+
+        strategies = get_strategies_from_graph(emotion)
+        suggestion = get_llm_suggestions(emotion, strategies, user_text)
 
         log_user_prompt(
             st.session_state["user_id"],
             user_text,
-            result["emotion"],
+            emotion,
             suggestion,
-            result["toxicity_score"],
-            result["timestamp"]
+            toxicity_score,
+            timestamp
         )
 
-        st.session_state["last_entry"] = result
-        st.session_state["last_entry"]["suggestion"] = suggestion
+        st.session_state["last_entry"] = {
+            "emotion": emotion,
+            "toxicity_score": toxicity_score,
+            "suggestion": suggestion,
+            "timestamp": timestamp
+        }
 
+# Show analysis result
 if "last_entry" in st.session_state:
     result = st.session_state["last_entry"]
     st.subheader("Your Analysis:")
@@ -79,6 +88,7 @@ if "last_entry" in st.session_state:
 
     st.info(f"💡 Suggestions: {result['suggestion']}")
 
+# Mood history
 st.subheader("📖 Your Mood History")
 history = get_user_logs(st.session_state["user_id"])
 if not history.empty:
