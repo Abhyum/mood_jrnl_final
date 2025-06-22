@@ -9,14 +9,21 @@ from mood_logic.graph import build_graph, get_strategies_from_graph
 from mood_logic.forecast import forecast_mood
 from llm.gemini import configure_gemini, get_llm_suggestions
 
-# Initial setup
+# Setup
 create_tables()
 configure_gemini()
 graph = build_graph()
 emotion_pipe, tox_pipe = get_pipes()
 
-# Safe session handling
-if st.session_state.get("user_id") is None:
+# Streamlit Config
+st.set_page_config(page_title="🌱 Mood & Emotion Journal", layout="centered")
+
+# Session Initialization
+if "user_id" not in st.session_state:
+    st.session_state["user_id"] = None
+
+# Login/Register
+if st.session_state["user_id"] is None:
     st.title("🔐 Login or Register")
     tab1, tab2 = st.tabs(["Login", "Register"])
 
@@ -41,8 +48,7 @@ if st.session_state.get("user_id") is None:
                 st.error("Email already registered.")
     st.stop()
 
-# Main app
-st.set_page_config(page_title="🌱 Mood & Emotion Journal", layout="centered")
+# Main Journal Page
 st.title("🌱 Mood & Emotion Journal")
 
 with st.form(key="journal_form"):
@@ -73,7 +79,7 @@ with st.form(key="journal_form"):
             "timestamp": timestamp
         }
 
-# Show analysis result
+# Display Results
 if "last_entry" in st.session_state:
     result = st.session_state["last_entry"]
     st.subheader("Your Analysis:")
@@ -88,7 +94,7 @@ if "last_entry" in st.session_state:
 
     st.info(f"💡 Suggestions: {result['suggestion']}")
 
-# Mood history
+# Display Mood History
 st.subheader("📖 Your Mood History")
 history = get_user_logs(st.session_state["user_id"])
 if not history.empty:
