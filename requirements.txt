@@ -1,6 +1,6 @@
 python-dotenv==1.0.1
-
-streamlit==1.46.0
+torch==2.1.2
+streamlit==1.26.0
 transformers==4.39.3
 google-generativeai==0.5.4
 prophet==1.1.5
