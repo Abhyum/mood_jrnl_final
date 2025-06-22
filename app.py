@@ -1,79 +1,87 @@
 import os
+from datetime import datetime
 import streamlit as st
 import pandas as pd
-from datetime import datetime
 
-from mood_logic.emotion_analysis import get_pipes, process_input
-from mood_logic.logger import log_mood, get_history
+from database.db import create_tables, register_user, login_user, log_user_prompt, get_user_logs
+from mood_logic.emotion_analysis import get_pipes, process_text
 from mood_logic.graph import build_graph, get_strategies_from_graph
 from mood_logic.forecast import forecast_mood
 from llm.gemini import configure_gemini, get_llm_suggestions
 
-# --- Configure Gemini ---
-try:
-    genai = configure_gemini()
-    GEMINI_ENABLED = True
-except Exception as e:
-    GEMINI_ENABLED = False
-    st.error(f"❌ Gemini setup failed: {e}")
-
-# --- Load ML Pipelines ---
+create_tables()
+configure_gemini()
+graph = build_graph()
 emotion_pipe, tox_pipe = get_pipes()
 
-# --- Load Strategy Graph ---
-graph = build_graph()
+if "user_id" not in st.session_state:
+    st.session_state["user_id"] = None
 
-# --- Streamlit App Setup ---
+if st.session_state["user_id"] is None:
+    st.title("🔐 Login or Register")
+    tab1, tab2 = st.tabs(["Login", "Register"])
+
+    with tab1:
+        email = st.text_input("Email")
+        password = st.text_input("Password", type="password")
+        if st.button("Login"):
+            user_id = login_user(email, password)
+            if user_id:
+                st.session_state["user_id"] = user_id
+                st.experimental_rerun()
+            else:
+                st.error("Invalid credentials.")
+
+    with tab2:
+        email = st.text_input("New Email")
+        password = st.text_input("New Password", type="password")
+        if st.button("Register"):
+            if register_user(email, password):
+                st.success("Registered! Now login.")
+            else:
+                st.error("Email already registered.")
+    st.stop()
+
 st.set_page_config(page_title="🌱 Mood & Emotion Journal", layout="centered")
 st.title("🌱 Mood & Emotion Journal")
 
-# --- Mood Input Form ---
 with st.form(key="journal_form"):
     user_text = st.text_area("How are you feeling today?", height=100)
     submitted = st.form_submit_button(label="Analyze & Log")
     if submitted and user_text.strip():
-        result = process_input(user_text, emotion_pipe, tox_pipe)
-        score = 1.0 - result['toxicity_score']
-        log_mood(result['emotion'], score, result['timestamp'])
-        st.session_state["last_entry"] = result
+        result = process_text(user_text, emotion_pipe, tox_pipe)
+        strategies = get_strategies_from_graph(result["emotion"])
+        suggestion = get_llm_suggestions(result["emotion"], strategies, user_text)
 
-# --- Show Analysis Result ---
+        log_user_prompt(
+            st.session_state["user_id"],
+            user_text,
+            result["emotion"],
+            suggestion,
+            result["toxicity_score"],
+            result["timestamp"]
+        )
+
+        st.session_state["last_entry"] = result
+        st.session_state["last_entry"]["suggestion"] = suggestion
+
 if "last_entry" in st.session_state:
     result = st.session_state["last_entry"]
     st.subheader("Your Analysis:")
     st.write(f"**Detected Emotion:** :blue[{result['emotion'].capitalize()}]")
     st.write(f"**Toxicity Score:** {result['toxicity_score']:.2f}")
 
-    strategies = get_strategies_from_graph(result["emotion"], graph)
+    strategies = get_strategies_from_graph(result["emotion"])
     if strategies:
         st.write(f"**Coping Strategies:** {', '.join(strategies)}")
     else:
         st.write("**Coping Strategies:** No direct strategies found.")
 
-    if GEMINI_ENABLED:
-        suggestions = get_llm_suggestions(genai, result["emotion"], strategies, result["text"])
-        st.info(f"💡 Suggestions: {suggestions}")
-    else:
-        st.warning("⚠️ Gemini LLM not enabled. No suggestions available.")
+    st.info(f"💡 Suggestions: {result['suggestion']}")
 
-# --- Show Mood Logs ---
-st.subheader("📖 Past Mood Logs")
-history = get_history()
-if len(history) > 0:
-    st.dataframe(history.sort_values("timestamp", ascending=False), use_container_width=True)
+st.subheader("📖 Your Mood History")
+history = get_user_logs(st.session_state["user_id"])
+if not history.empty:
+    st.dataframe(history[['timestamp', 'prompt', 'emotion', 'toxicity_score']])
 else:
-    st.write("*No logs yet. Your first mood entry will appear here.*")
-
-# --- Forecast Mood if Enough Data ---
-if len(history) >= 2:
-    st.subheader("📊 Mood Score Over Time")
-    history['timestamp'] = pd.to_datetime(history['timestamp'])
-    st.line_chart(history.set_index('timestamp')['score'])
-    forecast = forecast_mood()
-    if forecast is not None:
-        st.write("🔮 *Mood Forecast (next 7 days)*")
-        st.line_chart(forecast.set_index('ds')['yhat'])
-else:
-    st.write("*(Log at least two moods to see trends!)*")
-
-st.caption("🛡️ Your data is stored locally and privately in your device.")
+    st.write("*No entries found.*")
