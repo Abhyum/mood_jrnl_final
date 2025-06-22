@@ -2,8 +2,8 @@ from transformers import pipeline
 
 # Initialize the emotion and toxicity pipelines
 def get_pipes():
-    emotion_pipe = pipeline("text-classification", model="j-hartmann/emotion-english-distilroberta-base")
-    tox_pipe = pipeline("text-classification", model="martin-ha/toxic-comment-model")
+    emotion_pipe = pipeline("text-classification", model="j-hartmann/emotion-english-distilroberta-base", device=-1)
+    tox_pipe = pipeline("text-classification", model="martin-ha/toxic-comment-model", device=-1)
     return emotion_pipe, tox_pipe
 
 # Process input text to get emotion and toxicity predictions
