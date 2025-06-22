@@ -24,8 +24,9 @@ def process_text(emotion_pipe, tox_pipe, text):
     toxicity_result = tox_pipe(text)[0]
 
     return {
-        "emotion_label": emotion_result["label"],
+        "emotion": emotion_result["label"],
         "emotion_score": emotion_result["score"],
         "toxicity_label": toxicity_result["label"],
-        "toxicity_score": toxicity_result["score"]
+        "toxicity_score": toxicity_result["score"],
+        "timestamp": datetime.now().isoformat()  # required in app.py
     }
