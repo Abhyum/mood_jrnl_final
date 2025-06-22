@@ -1,5 +1,4 @@
 python-dotenv
-sqlite3
 torch
 streamlit
 transformers
