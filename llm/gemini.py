@@ -14,7 +14,7 @@ def configure_gemini():
 
 def get_llm_suggestions(genai, emotion, strategies, user_text):
     try:
-        model = genai.GenerativeModel(model_name="models/gemini-1.5-pro")
+        model = genai.GenerativeModel(model_name="models/gemini-1.5-flash")
         if strategies:
             strat_txt = "\n".join(f"- {s}" for s in strategies)
             prompt = (
