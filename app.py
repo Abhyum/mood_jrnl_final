@@ -15,14 +15,15 @@ configure_gemini()
 graph = build_graph()
 emotion_pipe, tox_pipe = get_pipes()
 
-# Streamlit Config
-st.set_page_config(page_title="🌱 Mood & Emotion Journal", layout="centered")
-
-# Session Initialization
+# Debug login session
 if "user_id" not in st.session_state:
     st.session_state["user_id"] = None
+    st.write("🔄 Session state 'user_id' initialized.")
 
-# Login/Register
+# TEMPORARY DEBUG BYPASS (Uncomment to skip login)
+# st.session_state["user_id"] = 1
+
+# LOGIN / REGISTER
 if st.session_state["user_id"] is None:
     st.title("🔐 Login or Register")
     tab1, tab2 = st.tabs(["Login", "Register"])
@@ -31,62 +32,66 @@ if st.session_state["user_id"] is None:
         email = st.text_input("Email")
         password = st.text_input("Password", type="password")
         if st.button("Login"):
+            st.write("🔍 Checking credentials...")
             user_id = login_user(email, password)
             if user_id:
+                st.success("✅ Login successful!")
                 st.session_state["user_id"] = user_id
                 st.experimental_rerun()
             else:
-                st.error("Invalid credentials.")
+                st.error("❌ Invalid credentials.")
 
     with tab2:
-        email = st.text_input("New Email")
-        password = st.text_input("New Password", type="password")
+        new_email = st.text_input("New Email")
+        new_password = st.text_input("New Password", type="password")
         if st.button("Register"):
-            if register_user(email, password):
-                st.success("Registered! Now login.")
+            if register_user(new_email, new_password):
+                st.success("🎉 Registered! Please login now.")
             else:
-                st.error("Email already registered.")
+                st.error("🚫 Email already registered.")
     st.stop()
 
-# Main Journal Page
+# MAIN APP
+st.set_page_config(page_title="🌱 Mood & Emotion Journal", layout="centered")
 st.title("🌱 Mood & Emotion Journal")
 
 with st.form(key="journal_form"):
     user_text = st.text_area("How are you feeling today?", height=100)
     submitted = st.form_submit_button(label="Analyze & Log")
+
     if submitted and user_text.strip():
-        result = process_text(emotion_pipe, tox_pipe, user_text)
-        emotion = result["emotion_label"]
-        toxicity_score = result["toxicity_score"]
-        timestamp = datetime.now().isoformat()
+        try:
+            result = process_text(emotion_pipe, tox_pipe, user_text)
+            emotion = result["emotion_label"]
+            toxicity_score = result["toxicity_score"]
+            timestamp = datetime.now().isoformat()
+            strategies = get_strategies_from_graph(emotion)
+            suggestion = get_llm_suggestions(emotion, strategies, user_text)
 
-        strategies = get_strategies_from_graph(emotion)
-        suggestion = get_llm_suggestions(emotion, strategies, user_text)
+            log_user_prompt(
+                st.session_state["user_id"],
+                user_text,
+                emotion,
+                suggestion,
+                toxicity_score,
+                timestamp
+            )
 
-        log_user_prompt(
-            st.session_state["user_id"],
-            user_text,
-            emotion,
-            suggestion,
-            toxicity_score,
-            timestamp
-        )
+            result["suggestion"] = suggestion
+            st.session_state["last_entry"] = result
 
-        st.session_state["last_entry"] = {
-            "emotion": emotion,
-            "toxicity_score": toxicity_score,
-            "suggestion": suggestion,
-            "timestamp": timestamp
-        }
+        except Exception as e:
+            st.error(f"🚨 Error while processing: {e}")
+            st.stop()
 
-# Display Results
+# SHOW ANALYSIS
 if "last_entry" in st.session_state:
     result = st.session_state["last_entry"]
     st.subheader("Your Analysis:")
-    st.write(f"**Detected Emotion:** :blue[{result['emotion'].capitalize()}]")
+    st.write(f"**Detected Emotion:** :blue[{result['emotion_label'].capitalize()}]")
     st.write(f"**Toxicity Score:** {result['toxicity_score']:.2f}")
 
-    strategies = get_strategies_from_graph(result["emotion"])
+    strategies = get_strategies_from_graph(result['emotion_label'])
     if strategies:
         st.write(f"**Coping Strategies:** {', '.join(strategies)}")
     else:
@@ -94,7 +99,7 @@ if "last_entry" in st.session_state:
 
     st.info(f"💡 Suggestions: {result['suggestion']}")
 
-# Display Mood History
+# SHOW MOOD HISTORY
 st.subheader("📖 Your Mood History")
 history = get_user_logs(st.session_state["user_id"])
 if not history.empty:
